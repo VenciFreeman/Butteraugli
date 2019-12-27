@@ -323,10 +323,10 @@ class Image {
 
 // Returns newly allocated planes of the given dimensions.
 template <typename T>
-static inline std::vector<Image<T>> CreatePlanes(const size_t xsize,
+static inline std::vector<Image<T> > CreatePlanes(const size_t xsize,
                                                  const size_t ysize,
                                                  const size_t num_planes) {
-  std::vector<Image<T>> planes;
+  std::vector<Image<T> > planes;
   planes.reserve(num_planes);
   for (size_t i = 0; i < num_planes; ++i) {
     planes.emplace_back(xsize, ysize);
@@ -346,9 +346,9 @@ static inline Image<T> CopyPixels(const Image<T> &other) {
 
 // Returns new planes with the same dimensions and pixel values.
 template <typename T>
-static inline std::vector<Image<T>> CopyPlanes(
-    const std::vector<Image<T>> &planes) {
-  std::vector<Image<T>> copy;
+static inline std::vector<Image<T> > CopyPlanes(
+    const std::vector<Image<T> > &planes) {
+  std::vector<Image<T> > copy;
   copy.reserve(planes.size());
   for (const Image<T> &plane : planes) {
     copy.push_back(CopyPixels(plane));
@@ -389,10 +389,10 @@ static inline void CopyFromPacked(const std::vector<T> &from, Image<T> *to) {
 }
 
 template <typename T>
-static inline std::vector<Image<T>> PlanesFromPacked(
+static inline std::vector<Image<T> > PlanesFromPacked(
     const size_t xsize, const size_t ysize,
-    const std::vector<std::vector<T>> &packed) {
-  std::vector<Image<T>> planes;
+    const std::vector<std::vector<T> > &packed) {
+  std::vector<Image<T> > planes;
   planes.reserve(packed.size());
   for (const std::vector<T> &p : packed) {
     planes.push_back(Image<T>(xsize, ysize));
@@ -402,11 +402,11 @@ static inline std::vector<Image<T>> PlanesFromPacked(
 }
 
 template <typename T>
-static inline std::vector<std::vector<T>> PackedFromPlanes(
-    const std::vector<Image<T>> &planes) {
+static inline std::vector<std::vector<T> > PackedFromPlanes(
+    const std::vector<Image<T> > &planes) {
   assert(!planes.empty());
   const size_t num_pixels = planes[0].xsize() * planes[0].ysize();
-  std::vector<std::vector<T>> packed;
+  std::vector<std::vector<T> > packed;
   packed.reserve(planes.size());
   for (const Image<T> &image : planes) {
     packed.push_back(std::vector<T>(num_pixels));
