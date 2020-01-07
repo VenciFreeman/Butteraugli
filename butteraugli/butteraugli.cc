@@ -29,7 +29,7 @@
 //   * Diffmap - to cluster and build an image of error between the images
 //   * Blur - to hold the smoothing code
 
-#include "butteraugli/butteraugli.h"
+#include "butteraugli.h"
 
 #include <assert.h>
 #include <math.h>
@@ -54,6 +54,22 @@
 #define PROFILER_FUNC
 #define PROFILER_ZONE(name)
 #endif
+/*为了解决nullptr的问题，我声明了一个类nullptr，这样在低于C++ 11的版本中nullptr就不会报错*/
+const
+class nullptr_t
+{
+public:
+    template<class T>
+    inline operator T*() const
+        { return 0; }
+
+    template<class C, class T>
+    inline operator T C::*() const
+        { return 0; }
+ 
+private:
+    void operator&() const;
+} nullptr = {}; 
 
 namespace butteraugli {
 

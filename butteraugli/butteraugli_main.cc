@@ -3,9 +3,12 @@
 #include <cstdio>
 #include <vector>
 #include "butteraugli.h"
+/*在hls中进行调试的过程中只需要加入main.c就可以*/ 
 
+/*告诉编译器是以C的函数来编译*/ 
 extern "C" {
 #include "png.h"
+#include "jpeglib.h"
 }
 
 namespace butteraugli {
@@ -144,10 +147,92 @@ const double* NewSrgbToLinearTable() {
   return table;
 }
 
-
+void jpeg_catch_error(j_common_ptr cinfo) {
+  (*cinfo->err->output_message) (cinfo);
+  jmp_buf* jpeg_jmpbuf = (jmp_buf*) cinfo->client_data;
+  jpeg_destroy(cinfo);
+  longjmp(*jpeg_jmpbuf, 1);
+}
 
 // "rgb": cleared and filled with same-sized image planes (one per channel);
 // either RGB, or RGBA if the PNG contains an alpha channel.
+bool ReadJPEG(FILE* f, std::vector<Image8>* rgb) {
+  rewind(f);
+
+  struct jpeg_decompress_struct cinfo;
+  struct jpeg_error_mgr jerr;
+  cinfo.err = jpeg_std_error(&jerr);
+  jmp_buf jpeg_jmpbuf;
+  cinfo.client_data = &jpeg_jmpbuf;
+  jerr.error_exit = jpeg_catch_error;
+  if (setjmp(jpeg_jmpbuf)) {
+    return false;
+  }
+
+  jpeg_create_decompress(&cinfo);
+
+  jpeg_stdio_src(&cinfo, f);
+  jpeg_read_header(&cinfo, TRUE);
+  jpeg_start_decompress(&cinfo);
+
+  int row_stride = cinfo.output_width * cinfo.output_components;
+  JSAMPARRAY buffer = (*cinfo.mem->alloc_sarray)
+    ((j_common_ptr) &cinfo, JPOOL_IMAGE, row_stride, 1);
+
+  const size_t xsize = cinfo.output_width;
+  const size_t ysize = cinfo.output_height;
+
+  *rgb = CreatePlanes<uint8_t>(xsize, ysize, 3);
+
+  switch (cinfo.out_color_space) {
+    case JCS_GRAYSCALE:
+      while (cinfo.output_scanline < cinfo.output_height) {
+        jpeg_read_scanlines(&cinfo, buffer, 1);
+
+        const uint8_t* const BUTTERAUGLI_RESTRICT row = buffer[0];
+        uint8_t* const BUTTERAUGLI_RESTRICT row0 =
+            (*rgb)[0].Row(cinfo.output_scanline - 1);
+        uint8_t* const BUTTERAUGLI_RESTRICT row1 =
+            (*rgb)[1].Row(cinfo.output_scanline - 1);
+        uint8_t* const BUTTERAUGLI_RESTRICT row2 =
+            (*rgb)[2].Row(cinfo.output_scanline - 1);
+
+        for (int x = 0; x < xsize; x++) {
+          const uint8_t gray = row[x];
+          row0[x] = row1[x] = row2[x] = gray;
+        }
+      }
+      break;
+
+    case JCS_RGB:
+      while (cinfo.output_scanline < cinfo.output_height) {
+        jpeg_read_scanlines(&cinfo, buffer, 1);
+
+        const uint8_t* const BUTTERAUGLI_RESTRICT row = buffer[0];
+        uint8_t* const BUTTERAUGLI_RESTRICT row0 =
+            (*rgb)[0].Row(cinfo.output_scanline - 1);
+        uint8_t* const BUTTERAUGLI_RESTRICT row1 =
+            (*rgb)[1].Row(cinfo.output_scanline - 1);
+        uint8_t* const BUTTERAUGLI_RESTRICT row2 =
+            (*rgb)[2].Row(cinfo.output_scanline - 1);
+
+        for (int x = 0; x < xsize; x++) {
+          row0[x] = row[3 * x + 0];
+          row1[x] = row[3 * x + 1];
+          row2[x] = row[3 * x + 2];
+        }
+      }
+      break;
+
+    default:
+      jpeg_destroy_decompress(&cinfo);
+      return false;
+  }
+
+  jpeg_finish_decompress(&cinfo);
+  jpeg_destroy_decompress(&cinfo);
+  return true;
+}
 
 // Translate R, G, B channels from sRGB to linear space. If an alpha channel
 // is present, overlay the image over a black or white background. Overlaying
@@ -210,6 +295,11 @@ std::vector<Image8> ReadImageOrDie(const char* filename) {
     exit(1);
   }
   if (magic[0] == 0xFF && magic[1] == 0xD8) {
+    if (!ReadJPEG(f, &rgb)) {
+      fprintf(stderr, "File %s is a malformed JPEG.\n", filename);
+      exit(1);
+    }
+  } else {
     if (!ReadPNG(f, &rgb)) {
       fprintf(stderr, "File %s is neither a valid JPEG nor a valid PNG.\n",
               filename);
